@@ -202,6 +202,76 @@ def calculate_governance_metrics(governance_data: dict) -> dict:
     }
 
 
+# Default weighting across the three ESG pillars (must sum to 1.0)
+DEFAULT_WEIGHTS = {"environmental": 0.4, "social": 0.3, "governance": 0.3}
+
+# Reasonable target benchmarks used to normalize raw metrics to 0-100
+BENCHMARKS = {
+    "emissions_kgco2e": 50000,   # emissions level considered "worst case" (score 0)
+    "training_hours": 40,        # target avg training hours per employee (score 100)
+    "ltifr": 5,                  # LTIFR considered "worst case" (score 0)
+}
+
+
+def _clip(value: float, low: float = 0, high: float = 100) -> float:
+    """Keep a score within the valid 0-100 range."""
+    return max(low, min(high, value))
+
+
+def calculate_esg_score(scope1: dict, scope2: dict, scope3: dict,
+                         social: dict, governance: dict,
+                         weights: dict = None) -> dict:
+    """
+    Combine Environmental, Social, and Governance results into one
+    composite score from 0 (worst) to 100 (best).
+
+    Takes the output dicts from the earlier calculation functions.
+    """
+    weights = weights or DEFAULT_WEIGHTS
+
+    # --- Environmental sub-score: less total emissions = higher score ---
+    total_emissions = (
+        scope1.get("total_scope1_emissions_kgco2e", 0)
+        + scope2.get("market_based_kgco2e", 0)
+        + scope3.get("total_scope3_emissions_kgco2e", 0)
+    )
+    e_score = _clip(100 - (total_emissions / BENCHMARKS["emissions_kgco2e"] * 100))
+
+    # --- Social sub-score: average of diversity, training, and safety ---
+    training_score = _clip(social.get("avg_training_hours", 0) / BENCHMARKS["training_hours"] * 100)
+    safety_score = _clip(100 - (social.get("ltifr", 0) / BENCHMARKS["ltifr"] * 100))
+    s_score = _clip((
+        social.get("diversity_pct", 0)
+        + social.get("executive_female_ratio_pct", 0)
+        + training_score
+        + safety_score
+    ) / 4)
+
+    # --- Governance sub-score: average of independence, ethics, cyber status ---
+    cyber_score = {"Compliant": 100, "Overdue": 50, "Non-Compliant": 0}.get(
+        governance.get("cyber_audit_status"), 0
+    )
+    g_score = _clip((
+        governance.get("board_independence_pct", 0)
+        + governance.get("ethics_policy_signed_pct", 0)
+        + cyber_score
+    ) / 3)
+
+    # --- Composite: weighted blend of the three pillar scores ---
+    composite_score = _clip(
+        e_score * weights["environmental"]
+        + s_score * weights["social"]
+        + g_score * weights["governance"]
+    )
+
+    return {
+        "environmental_score": round(e_score, 2),
+        "social_score": round(s_score, 2),
+        "governance_score": round(g_score, 2),
+        "composite_esg_score": round(composite_score, 2),
+    }
+
+
 # Example usage
 if __name__ == "__main__":
     sample_data = {
@@ -209,20 +279,23 @@ if __name__ == "__main__":
         "gasoline_liters": 500,
         "natural_gas_m3": 300,
     }
-    print(calculate_scope1_emissions(sample_data))
+    scope1_result = calculate_scope1_emissions(sample_data)
+    print(scope1_result)
 
-    print(calculate_scope2_emissions(
+    scope2_result = calculate_scope2_emissions(
         electricity_kwh=10000,
         market_factor=0.30,
         renewable_kwh=2000,
-    ))
+    )
+    print(scope2_result)
 
-    print(calculate_scope3_emissions(
+    scope3_result = calculate_scope3_emissions(
         travel_data={"air_km": 5000, "rail_km": 1200, "car_km": 800},
         waste_data={"total_waste_kg": 2000, "recycled_kg": 1200},
-    ))
+    )
+    print(scope3_result)
 
-    print(calculate_social_metrics({
+    social_result = calculate_social_metrics({
         "total_employees": 500,
         "diverse_employees": 210,
         "total_executives": 20,
@@ -230,13 +303,20 @@ if __name__ == "__main__":
         "total_training_hours": 8000,
         "lost_time_injuries": 3,
         "total_hours_worked": 1_000_000,
-    }))
+    })
+    print(social_result)
 
-    print(calculate_governance_metrics({
+    governance_result = calculate_governance_metrics({
         "total_board_members": 10,
         "independent_directors": 7,
         "total_employees": 500,
         "ethics_policy_signed": 480,
         "cyber_audit_passed": True,
         "days_since_cyber_audit": 200,
-    }))
+    })
+    print(governance_result)
+
+    print(calculate_esg_score(
+        scope1_result, scope2_result, scope3_result,
+        social_result, governance_result,
+    ))
