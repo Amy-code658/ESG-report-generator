@@ -157,6 +157,51 @@ def calculate_social_metrics(social_data: dict) -> dict:
     }
 
 
+def calculate_governance_metrics(governance_data: dict) -> dict:
+    """
+    Calculate key Governance (G) metrics for ESG reporting.
+
+    Expected keys in governance_data:
+        total_board_members, independent_directors,
+        total_employees, ethics_policy_signed,
+        cyber_audit_passed (bool), days_since_cyber_audit (int)
+
+    Returns board independence %, ethics policy sign-off %,
+    and a simple cyber audit status classification.
+    """
+    total_board_members = governance_data.get("total_board_members", 0)
+    total_employees = governance_data.get("total_employees", 0)
+
+    # Percentage of board seats held by independent directors
+    board_independence_pct = (
+        governance_data.get("independent_directors", 0) / total_board_members * 100
+        if total_board_members > 0 else 0
+    )
+
+    # Percentage of employees who have signed the ethics policy
+    ethics_signed_pct = (
+        governance_data.get("ethics_policy_signed", 0) / total_employees * 100
+        if total_employees > 0 else 0
+    )
+
+    # Cyber audit status: must have passed AND be within the last 365 days
+    passed = governance_data.get("cyber_audit_passed", False)
+    days_since_audit = governance_data.get("days_since_cyber_audit", None)
+
+    if not passed:
+        cyber_audit_status = "Non-Compliant"
+    elif days_since_audit is None or days_since_audit > 365:
+        cyber_audit_status = "Overdue"
+    else:
+        cyber_audit_status = "Compliant"
+
+    return {
+        "board_independence_pct": round(board_independence_pct, 2),
+        "ethics_policy_signed_pct": round(ethics_signed_pct, 2),
+        "cyber_audit_status": cyber_audit_status,
+    }
+
+
 # Example usage
 if __name__ == "__main__":
     sample_data = {
@@ -185,4 +230,13 @@ if __name__ == "__main__":
         "total_training_hours": 8000,
         "lost_time_injuries": 3,
         "total_hours_worked": 1_000_000,
+    }))
+
+    print(calculate_governance_metrics({
+        "total_board_members": 10,
+        "independent_directors": 7,
+        "total_employees": 500,
+        "ethics_policy_signed": 480,
+        "cyber_audit_passed": True,
+        "days_since_cyber_audit": 200,
     }))
