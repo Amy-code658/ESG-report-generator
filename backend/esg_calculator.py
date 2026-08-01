@@ -109,6 +109,54 @@ def calculate_scope3_emissions(travel_data: dict, waste_data: dict) -> dict:
     }
 
 
+def calculate_social_metrics(social_data: dict) -> dict:
+    """
+    Calculate key Social (S) metrics for ESG reporting.
+
+    Expected keys in social_data:
+        total_employees, diverse_employees, total_executives,
+        female_executives, total_training_hours,
+        lost_time_injuries, total_hours_worked
+
+    Returns diversity %, executive female ratio %, avg training hours,
+    and LTIFR (Lost Time Injury Frequency Rate).
+    """
+    total_employees = social_data.get("total_employees", 0)
+    total_executives = social_data.get("total_executives", 0)
+    total_hours_worked = social_data.get("total_hours_worked", 0)
+
+    # Overall workforce diversity percentage
+    diversity_pct = (
+        social_data.get("diverse_employees", 0) / total_employees * 100
+        if total_employees > 0 else 0
+    )
+
+    # Share of female employees in executive roles
+    exec_female_ratio = (
+        social_data.get("female_executives", 0) / total_executives * 100
+        if total_executives > 0 else 0
+    )
+
+    # Average training hours per employee
+    avg_training_hours = (
+        social_data.get("total_training_hours", 0) / total_employees
+        if total_employees > 0 else 0
+    )
+
+    # LTIFR: lost time injuries per 1,000,000 hours worked (standard safety metric)
+    ltifr = (
+        social_data.get("lost_time_injuries", 0) * 1_000_000 / total_hours_worked
+        if total_hours_worked > 0 else 0
+    )
+
+    return {
+        "diversity_pct": round(diversity_pct, 2),
+        "executive_female_ratio_pct": round(exec_female_ratio, 2),
+        "avg_training_hours": round(avg_training_hours, 2),
+        "ltifr": round(ltifr, 2),
+    }
+
+
 # Example usage
 if __name__ == "__main__":
     sample_data = {
@@ -128,3 +176,13 @@ if __name__ == "__main__":
         travel_data={"air_km": 5000, "rail_km": 1200, "car_km": 800},
         waste_data={"total_waste_kg": 2000, "recycled_kg": 1200},
     ))
+
+    print(calculate_social_metrics({
+        "total_employees": 500,
+        "diverse_employees": 210,
+        "total_executives": 20,
+        "female_executives": 7,
+        "total_training_hours": 8000,
+        "lost_time_injuries": 3,
+        "total_hours_worked": 1_000_000,
+    }))
