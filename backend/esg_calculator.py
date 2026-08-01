@@ -66,6 +66,49 @@ def calculate_scope2_emissions(electricity_kwh: float, market_factor: float = No
     }
 
 
+# Business travel emission factors (kgCO2e per km, by mode)
+TRAVEL_EMISSION_FACTORS = {
+    "air_km": 0.150,
+    "rail_km": 0.041,
+    "car_km": 0.171,
+}
+
+# Waste disposal emission factors (kgCO2e per kg)
+LANDFILL_FACTOR = 0.58   # waste sent to landfill
+RECYCLING_FACTOR = 0.02  # waste diverted to recycling
+
+
+def calculate_scope3_emissions(travel_data: dict, waste_data: dict) -> dict:
+    """
+    Calculate Scope 3 value chain emissions from business travel and waste.
+
+    travel_data: dict with keys like 'air_km', 'rail_km', 'car_km'
+    waste_data:  dict with 'total_waste_kg' and 'recycled_kg'
+
+    Returns emissions breakdown for travel and waste, plus the combined total.
+    """
+    # Sum emissions across all travel modes provided
+    travel_emissions = sum(
+        distance * TRAVEL_EMISSION_FACTORS.get(mode, 0)
+        for mode, distance in travel_data.items()
+    )
+
+    # Split waste into recycled vs landfill portions, each with its own factor
+    total_waste = waste_data.get("total_waste_kg", 0)
+    recycled = waste_data.get("recycled_kg", 0)
+    landfill = max(total_waste - recycled, 0)
+
+    waste_emissions = (recycled * RECYCLING_FACTOR) + (landfill * LANDFILL_FACTOR)
+    diversion_rate = (recycled / total_waste * 100) if total_waste > 0 else 0
+
+    return {
+        "travel_emissions_kgco2e": round(travel_emissions, 2),
+        "waste_emissions_kgco2e": round(waste_emissions, 2),
+        "waste_diversion_rate_pct": round(diversion_rate, 2),
+        "total_scope3_emissions_kgco2e": round(travel_emissions + waste_emissions, 2),
+    }
+
+
 # Example usage
 if __name__ == "__main__":
     sample_data = {
@@ -79,4 +122,9 @@ if __name__ == "__main__":
         electricity_kwh=10000,
         market_factor=0.30,
         renewable_kwh=2000,
+    ))
+
+    print(calculate_scope3_emissions(
+        travel_data={"air_km": 5000, "rail_km": 1200, "car_km": 800},
+        waste_data={"total_waste_kg": 2000, "recycled_kg": 1200},
     ))
