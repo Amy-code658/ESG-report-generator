@@ -34,6 +34,38 @@ def calculate_scope1_emissions(fuel_usage: dict) -> dict:
     return breakdown
 
 
+# Average national grid emission factor, used for location-based method
+GRID_EMISSION_FACTOR = 0.45  # kgCO2e per kWh
+
+
+def calculate_scope2_emissions(electricity_kwh: float, market_factor: float = None,
+                                renewable_kwh: float = 0) -> dict:
+    """
+    Calculate Scope 2 indirect emissions from purchased electricity.
+
+    electricity_kwh: total electricity consumed (kWh)
+    market_factor:   supplier-specific emission factor (kgCO2e/kWh),
+                      used for the market-based method if provided
+    renewable_kwh:   electricity covered by renewable contracts/RECs,
+                      treated as zero-emission under market-based method
+
+    Returns both location-based and market-based emission totals.
+    """
+    # Location-based: uses the average grid factor, ignores offsets
+    location_based = electricity_kwh * GRID_EMISSION_FACTOR
+
+    # Market-based: uses supplier factor (or grid factor as fallback),
+    # and subtracts renewable-covered kWh as zero-emission
+    factor = market_factor if market_factor is not None else GRID_EMISSION_FACTOR
+    non_renewable_kwh = max(electricity_kwh - renewable_kwh, 0)
+    market_based = non_renewable_kwh * factor
+
+    return {
+        "location_based_kgco2e": round(location_based, 2),
+        "market_based_kgco2e": round(market_based, 2),
+    }
+
+
 # Example usage
 if __name__ == "__main__":
     sample_data = {
@@ -42,3 +74,9 @@ if __name__ == "__main__":
         "natural_gas_m3": 300,
     }
     print(calculate_scope1_emissions(sample_data))
+
+    print(calculate_scope2_emissions(
+        electricity_kwh=10000,
+        market_factor=0.30,
+        renewable_kwh=2000,
+    ))
