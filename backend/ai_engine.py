@@ -54,8 +54,71 @@ def call_gemini_api(prompt: str, api_key: str = None) -> str:
         return ""
 
 
+# Fixed set of sections the AI must return, matching report requirements
+REPORT_SECTIONS = [
+    "executive_summary",
+    "environmental_narrative",
+    "social_review",
+    "governance_disclosure",
+    "gri_alignment",
+    "material_gap_analysis",
+]
+
+
+def build_report_prompt(esg_data: dict) -> str:
+    """
+    Build a prompt that instructs Gemini to return a strict JSON object
+    covering all required ESG report sections, based on calculated metrics.
+    """
+    prompt = f"""
+You are an ESG reporting analyst. Using the metrics below, write a corporate
+sustainability report. Respond ONLY with valid JSON (no markdown, no extra
+text) using exactly these keys:
+
+- "executive_summary": 2-3 sentence high-level overview of ESG performance
+- "environmental_narrative": discussion of emissions performance (Scope 1/2/3)
+- "social_review": discussion of diversity, training, and safety performance
+- "governance_disclosure": discussion of board, ethics, and cyber governance
+- "gri_alignment": how the data aligns with GRI 302 (Energy), GRI 305
+  (Emissions), and GRI 405 (Diversity & Equal Opportunity) standards
+- "material_gap_analysis": key data gaps or risks that should be addressed
+
+ESG Metrics:
+{json.dumps(esg_data, indent=2)}
+""".strip()
+
+    return prompt
+
+
+def parse_report_response(raw_text: str) -> dict:
+    """
+    Parse the model's JSON response into a dict, tolerating cases where
+    Gemini wraps the JSON in markdown code fences.
+    """
+    cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Return empty strings for each section if parsing fails
+        return {section: "" for section in REPORT_SECTIONS}
+
+
 # Example usage
 if __name__ == "__main__":
-    sample_prompt = "Say hello in one sentence."
-    output = call_gemini_api(sample_prompt)
-    print(output or "No API key set or call failed.")
+    sample_esg_data = {
+        "total_scope1_emissions_kgco2e": 4402.0,
+        "market_based_kgco2e": 2400.0,
+        "total_scope3_emissions_kgco2e": 1424.0,
+        "diversity_pct": 42.0,
+        "board_independence_pct": 70.0,
+        "composite_esg_score": 71.79,
+    }
+
+    prompt = build_report_prompt(sample_esg_data)
+    raw_output = call_gemini_api(prompt)
+
+    if raw_output:
+        report = parse_report_response(raw_output)
+        print(json.dumps(report, indent=2))
+    else:
+        print("No API key set or call failed.")
