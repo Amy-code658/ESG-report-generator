@@ -4,14 +4,18 @@ Step 2: API routes for form drafts, submissions, report generation, and exports
 """
 
 import json
+import mimetypes
 import sys
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+STATIC_DIR = PROJECT_ROOT / "frontend"  # folder containing the frontend build
+
 # Make sibling project modules importable (esg_calculator.py lives one level up)
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+sys.path.append(str(PROJECT_ROOT))
 
 try:
     from esg_calculator import (
@@ -138,8 +142,10 @@ class ESGRequestHandler(BaseHTTPRequestHandler):
             self._list_submissions()
         elif self.path.startswith("/api/v1/esg/export-html/"):
             self._export_html()
-        else:
+        elif self.path.startswith("/api/"):
             self._send_json(404, {"error": "Not found"})
+        else:
+            self._serve_static()  # anything not under /api/ is a frontend asset
 
     def _list_submissions(self):
         """Return a summary list of all past submissions."""
@@ -164,6 +170,31 @@ class ESGRequestHandler(BaseHTTPRequestHandler):
         body = html.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_static(self):
+        """Serve a file from the frontend directory (defaults to index.html)."""
+        request_path = self.path.split("?", 1)[0]
+        if request_path == "/":
+            request_path = "/index.html"
+
+        file_path = (STATIC_DIR / request_path.lstrip("/")).resolve()
+
+        # Block requests that try to escape the static directory (path traversal)
+        if STATIC_DIR not in file_path.parents:
+            self._send_json(403, {"error": "Forbidden"})
+            return
+
+        if not file_path.is_file():
+            self._send_json(404, {"error": "File not found"})
+            return
+
+        content_type, _ = mimetypes.guess_type(str(file_path))
+        body = file_path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", content_type or "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
